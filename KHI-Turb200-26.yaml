@@ -1,0 +1,113 @@
+---
+environment:
+  title: 2GasKHI_3DxzTurbulent-2
+  tagDirectory: false
+arguments: {}
+timestepper:
+  name: theMainTimeStepper
+  arguments:
+    ts_type: rk
+    ts_max_time: 1.2
+    ts_dt: 1e-8
+    ts_adapt_type: physicsConstrained
+  io: !<!ablate::io::Hdf5MultiFileSerializer>
+    interval: !<!ablate::io::interval::SimulationTimeInterval> 0.05
+  domain: !<!ablate::domain::BoxMesh>
+    name: simpleBoxField
+    faces: [350, 350, 50]
+    lower: [-0.5, -0.5, -0.1]
+    upper: [0.5, 0.5, 0.1]
+    boundary: [PERIODIC, PERIODIC, PERIODIC]
+    options:
+      dm_refine: 1
+    modifiers:
+      - !<!ablate::domain::modifiers::DistributeWithGhostCells> ""
+      - !<!ablate::domain::modifiers::GhostBoundaryCells> ""
+    fields:
+      - !<!ablate::finiteVolume::CompressibleFlowFields>
+        eos: !<!ablate::eos::PerfectGas>
+          parameters:
+            gamma: 0
+            Rgas: 0
+      - name: densityvolumeFraction
+        type: FVM
+      - name: volumeFraction
+        type: FVM
+      - name: pressure
+        location: AUX
+        type: FVM
+  initialization:
+    - !<!ablate::finiteVolume::fieldFunctions::Euler>
+      state: &1
+        eos: !<!ablate::eos::TwoPhase> &2
+          eos1: !<!ablate::eos::PerfectGas> &3
+            parameters:
+              gamma: 1.4
+              Rgas: 287.0
+          eos2: *3
+        temperature: "abs(y) > 0.25 + 0.01*sin(31.4159265*x) + 0.01*sin(31.4159265*z) ? 0.008710801393728223 : 0.004355400696864111"
+        pressure: 2.5
+        velocity: !<!ablate::mathFunctions::ParsedSeries>
+          upperBound: 5000
+          lowerBound: 1
+          formula: abs(y) > 0.25 + 0.01*sin(31.4159265*x) + 0.01*sin(31.4159265*z) ? (-0.5/5000)+2 * sqrt(1.453 * exp(-2 * (((2*3.14*100/5) + (3.14/(.05/400) - (2*3.14*100/5)) * (i - 1)  / 5000) / 2000) ^ 2) * (.0215^2 / 25.82) * (((2*3.14*100/5)+ (3.14/(.05/100)- (2*3.14*100/5)) * (i - 1)  / 5000)/ 25.82) ^ 4 / (1* (1 + (((2*3.14*100/5) + (3.14/(.05/100)- (2*3.14*100/5)) * (i - 1)  / 5000) / 25.82) )^ (17/6)))* cos( ((2*3.14*100/5) + (3.14/(.05/100) - (2*3.14*100/5)) * (i - 1)  / 5000) * (2/(.05/100))*sin(.5* ((2*3.14*100/5) + (3.14/(.05/100) - (2*3.14*100/5)) * (i - 1)  / 5000)* (.05/100)*sin( acos(rand(-1,1))) * sin(rand(0,2*3.14)) )* x + (rand(-3.14/2,3.14/2))) :( 0.5/5000)+2 * sqrt(1.453 * exp(-2 * (((2*3.14*100/5) + (3.14/(.05/400) - (2*3.14*100/5)) * (i - 1)  / 5000) / 2000) ^ 2) * (.0215^2 / 25.82) * (((2*3.14*100/5)+ (3.14/(.05/100)- (2*3.14*100/5)) * (i - 1)  / 5000)/ 25.82) ^ 4 / (1* (1 + (((2*3.14*100/5) + (3.14/(.05/100)- (2*3.14*100/5)) * (i - 1)  / 5000) / 25.82) )^ (17/6)))* cos( ((2*3.14*100/5) + (3.14/(.05/100) - (2*3.14*100/5)) * (i - 1)  / 5000) * (2/(.05/100))*sin(.5* ((2*3.14*100/5) + (3.14/(.05/100) - (2*3.14*100/5)) * (i - 1)  / 5000)* (.05/100)*sin( acos(rand(-1,1))) * sin(rand(0,2*3.14)) )* x + (rand(-3.14/2,3.14/2))), 0, 0
+          constants:
+            n: 5000
+            alpha: 1.453
+            delta: (2*3.14*9/100/8)
+            kappa_eta: 0.8573*5624
+            uPrime: 0.25
+            kappa_e: 25.82
+            kappa_o: (100/9)
+            kappa_max: 3.14/delta
+            HI: 1
+            LO: -1
+            HI1: 2*pi
+            LO1: 0
+            HI2: pi/2
+            LO2: -pi/2
+        other:
+          fieldName: volumeFraction
+          field: "abs(y) > 0.25 + 0.01*sin(31.4159265*x) + 0.01*sin(31.4159265*z) ? 0.0 : 1.0"
+    - !<!ablate::finiteVolume::fieldFunctions::DensityVolumeFraction>
+      state: *1
+    - fieldName: volumeFraction
+      field: "abs(y) > 0.25 + 0.01*sin(31.4159265*x) + 0.01*sin(31.4159265*z) ? 0.0 : 1.0"
+solver: !<!ablate::finiteVolume::FiniteVolumeSolver>
+  id: flow solver
+  processes:
+    - !<!ablate::finiteVolume::processes::TwoPhaseEulerAdvection>
+      parameters:
+        cfl: 0.1
+      eos: *2
+      fluxCalculatorGasGas: !<!ablate::finiteVolume::fluxCalculator::Riemann2Gas>
+        eosL: *3
+        eosR: *3
+      fluxCalculatorGasLiquid: !<!ablate::finiteVolume::fluxCalculator::Riemann2Gas>
+        eosL: *3
+        eosR: *3
+      fluxCalculatorLiquidGas: !<!ablate::finiteVolume::fluxCalculator::Riemann2Gas>
+        eosL: *3
+        eosR: *3
+      fluxCalculatorLiquidLiquid: !<!ablate::finiteVolume::fluxCalculator::Riemann2Gas>
+        eosL: *3
+        eosR: *3
+  monitors:
+    - !<!ablate::monitors::TimeStepMonitor>
+      interval: 1
+    - !<!ablate::monitors::Probes>
+      probes:
+        - name: a
+          location: [-.05, .24, .0]
+        - name: b
+          location: [-.05, .25, .0]
+        - name: c
+          location: [-.05, .26, .0]
+        - name: a1
+          location: [.05, .24, .0]
+        - name: b1
+          location: [.05, .25, .0]
+        - name: c1
+          location: [.05, .26, .0]
+      bufferSize: 200
+      variables: [euler, densityvolumeFraction]
